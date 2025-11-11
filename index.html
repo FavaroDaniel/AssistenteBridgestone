@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistente de Diagnóstico - Bridgestone</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --fg: #1e2024;
+            --muted: #6f7782;
+            --panel: #f3f3f3;
+            --line: #e6e6e6;
+            --header: #3b3f44;
+            --accent: #cf2e2e;
+            --primary: #3b3f44;
+            --lightbtn: #efefef;
+            --err: #d93025;
+        }
+        
+        * { box-sizing: border-box; }
+        
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+            font-size: 14px;
+        }
+        
+        .appbar {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: var(--header);
+            color: #fff;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        
+        .brand { font-weight: 900; letter-spacing: .5px; }
+        .rightbar { display: flex; align-items: center; gap: 10px; }
+        .dev { color: #fff; opacity: .85; font-size: 12px; white-space: nowrap; }
+        
+        .container { max-width: 980px; margin: 0 auto; padding: 16px; }
+        
+        .card {
+            background: var(--panel);
+            border-radius: 14px;
+            padding: 16px;
+            border: 1px solid var(--line);
+            box-shadow: 0 2px 6px rgba(0,0,0,.04);
+            margin-bottom: 16px;
+        }
+        
+        h2 { margin: 6px 0 10px 0; font-size: clamp(20px, 5.2vw, 28px); }
+        
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 740px) { .row { grid-template-columns: 1fr; } }
+        
+        .input, .select, .textarea {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #fff; color: var(--fg); font-size: 15px;
+        }
+        .textarea { min-height: 120px; resize: none; }
+        .input.error, .select.error, .textarea.error { border-color: var(--err); box-shadow: 0 0 0 3px rgba(217,48,37,.12); }
+        
+        .small { font-size: 12px; color: var(--muted); }
+        .list { display: grid; gap: 12px; }
+        
+        .item {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+        .item.error { border-color: var(--err); box-shadow: 0 0 0 3px rgba(217,48,37,.12); }
+        .item .title { font-weight: 900; font-size: clamp(18px, 4.6vw, 20px); }
+        .item .how { margin-top: 6px; color: #333; }
+        .item .obs {
+            width: 100%; min-height: 52px; margin-top: 8px; border-radius: 10px;
+            border: 1px solid #ddd; padding: 8px; background: #fafafa; resize: none; color: #111;
+        }
+        
+        .btn {
+            cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 12px 22px; border-radius: 12px; border: 1px solid transparent; font-weight: 800; font-size: 15px;
+            transition: .15s transform, .15s filter; white-space: nowrap;
+        }
+        .btn:active { transform: translateY(1px); }
+        .btn[disabled] { opacity: .6; cursor: not-allowed; }
+        .btn.gray { background: var(--lightbtn); border-color: #d6d9df; color: #1f2328; }
+        .btn.dark { background: var(--primary); color: #fff; border: 1px solid #2c2f34; }
+        .btn.red { background: var(--accent); color: #fff; border: 1px solid #b81f1f; }
+        .btn.outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+        .appbar .btn.outline { border-color: #fff; color: #fff; }
+        .btn.icon .ic { width: 16px; height: 16px; display: inline-block; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        @media (max-width: 520px) { .actions .btn { flex: 1 1 calc(50% - 8px); } }
+        @media (min-width: 521px) { .actions .btn { flex: 0 0 auto; } }
+        
+        .badge { padding: 3px 8px; border-radius: 999px; background: #eee; color: #333; font-size: 12px; }
+        .progress { height: 10px; border-radius: 999px; background: #eee; overflow: hidden; margin: 8px 0 0; }
+        .progress>span { display: block; height: 100%; background: var(--accent); width: 0%; }
+        
+        .photo-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: start; margin-bottom: 10px; }
+        .photo-row img { width: 120px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+        .photo-row .caption { width: 100%; min-height: 40px; }
+        
+        /* === DIAGRAMAS: CENTRALIZADOS E ESTÁVEIS NO MOBILE === */
+        .diagram-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px 20px;
+            justify-items: center;
+            margin: 12px 4px 12px;
+            width: 100%;
+        }
+        @media (min-width: 700px) {
+            .diagram-grid { grid-template-columns: repeat(2, minmax(280px,1fr)); gap: 32px 28px; }
+        }
+        .diag-block { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; max-width: 340px; margin: 0 auto; }
+        .diag-title { font-weight: 900; font-size: clamp(14px,3.5vw,16px); color: var(--fg); text-align: center; }
+        
+        /* Tamanho fixo para não "puxar" à direita */
+        .circle {
+            --C: 280px;                 /* tamanho fixo do diagrama */
+            position: relative;
+            width: var(--C);
+            height: var(--C);
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #dbe3ef;
+            box-shadow: inset 0 0 0 6px #f5f7fb;
+            margin: 10px auto;
+        }
+        .circle .axis {
+            position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #dbe3ef; transform: translateX(-50%);
+        }
+        .circle .axis.h {
+            top: 50%; left: 0; right: 0; height: 2px; width: auto; transform: translateY(-50%);
+        }
+        
+        .qwrap { position: absolute; display: flex; align-items: center; gap: 6px; z-index: 1; }
+        .qwrap input.q {
+            width: 110px;              /* largura estável */
+            padding: 10px 34px 10px 10px;
+            border-radius: 12px; border: 1px solid #cfd4da;
+            text-align: center; background: #fafafa; font-weight: 800; font-size: 14px;
+        }
+        .qwrap .unit { position: absolute; right: 8px; pointer-events: none; color: #666; font-size: 12px; }
+        .qwrap.top    { top: 18%; left: 50%; transform: translate(-50%,-50%); }
+        .qwrap.bottom { top: 82%; left: 50%; transform: translate(-50%,-50%); }
+        .qwrap.left   { left: 15%; top: 50%; transform: translate(-50%,-50%); }
+        .qwrap.right  { left: 85%; top: 50%; transform: translate(-50%,-50%); }
+        
+        /* === IMPRESSÃO / PDF === */
+        @media print {
+            .no-print { display: none !important; }
+            #printArea { display: block !important; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            
+            /* Nunca quebrar diagramas no meio */
+            .avoid-break, .print-diagram, .diagram-grid, table, thead, tbody, tr, td, th {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            /* Forçar 2 colunas (2x2) no PDF */
+            .diagram-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 20px 40px !important;
+            }
+        }
+        
+        #printArea { display: none; }
+        .print-diagram .qval {
+            position: absolute; transform: translate(-50%,-50%);
+            padding: 3px 6px; border: 1px solid #bbb; border-radius: 8px; background: #f7f7f7; font-size: 13px;
+        }
+        .print-diagram .qval.top { left: 50%; top: 20%; }
+        .print-diagram .qval.right { left: 80%; top: 50%; }
+        .print-diagram .qval.bottom { left: 50%; top: 80%; }
+        .print-diagram .qval.left { left: 20%; top: 50%; }
+        
+        .print-photos {
+            display: grid; grid-template-columns: repeat(2,minmax(260px,1fr)); gap: 16px; margin-top: 8px;
+        }
+        .print-photos img {
+            width: 100%; height: 300px;   /* imagens maiores no PDF */
+            object-fit: cover; border: 1px solid #bbb; border-radius: 8px;
+        }
+        
+        .toast {
+            position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+            background: #111; color: #fff; padding: 10px 14px; border-radius: 10px; opacity: 0; transition: .2s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        
+        /* Câmera modal */
+        #camModal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 50; }
+        #camBox { background: #fff; padding: 16px; border-radius: 12px; max-width: 720px; width: 95%; }
+        #camBox video, #camBox canvas { width: 100%; max-height: 60vh; background: #000; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="appbar no-print">
+        <div class="brand">BRIDGESTONE</div>
+        <div class="rightbar">
+            <button id="btnClear" class="btn outline" title="Reseta tudo">Limpar</button>
+            <div class="dev">Desenvolvido por Daniel</div>
+        </div>
+    </div>
+
+    <div class="container no-print">
+        <div class="card" id="cardInit">
+            <h2>Assistente de Diagnóstico</h2>
+            <div class="row">
+                <div>
+                    <label class="small">Nº da WO (ordem de serviço) <span style="color:var(--err)">*</span></label>
+                    <input id="inpWO" class="input" placeholder="Ex.: 123456">
+                </div>
+                <div>
+                    <label class="small">Nome do técnico <span style="color:var(--err)">*</span></label>
+                    <input id="inpTec" class="input" placeholder="Ex.: João Silva">
+                </div>
+            </div>
+
+            <h2 style="margin-top:14px">Escolha o defeito</h2>
+            <select id="selDef" class="select">
+                <option value="" selected>— selecione —</option>
+                <option value="Abortou a Cura">Abortou a Cura</option>
+                <option value="Falta de Cura">Falta de Cura</option>
+            </select>
+            <div class="actions" style="justify-content:flex-end;margin-top:10px">
+                <button id="btnGo" class="btn dark">Avançar</button>
+            </div>
+        </div>
+
+        <div class="card" id="cardChk" style="display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+                <div><strong id="chkTitle" style="font-size:22px">Checklist</strong><br>
+                    <span class="small">Marque OK / NOK / N.A. e registre observações (NOK exige observação)</span></div>
+                <div class="badge"><span id="done">0</span>/<span id="total">0</span></div>
+            </div>
+            <div class="progress"><span id="bar"></span></div>
+            <div id="lista" class="list" style="margin-top:12px"></div>
+
+            <!-- Ações finais -->
+            <div class="actions" style="justify-content:flex-end;margin-top:10px">
+                <label class="btn gray icon">
+                    <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M5 7h3l1-2h6l1 2h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm7 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
+                    </svg>
+                    Anexar imagem
+                    <input id="filePhoto" type="file" accept="image/*" hidden>
+                </label>
+                <button id="btnCam" class="btn gray icon" title="Abrir câmera">
+                    <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M4 7h3l1.2-2.4A1 1 0 0 1 9 4h6a1 1 0 0 1 .9.6L17 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm8 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
+                    </svg>
+                    Tirar foto
+                </button>
+                <button id="btnResumo" class="btn red">Gerar resumo para o BAMM</button>
+                <button id="btnPDF" class="btn dark">Salvar PDF</button>
+            </div>
+
+            <div id="photoList" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card" id="cardOut" style="display:none">
+            <h2>Resumo</h2>
+            <textarea id="out" class="textarea" placeholder="Resumo gerado aqui…"></textarea>
+            <div class="actions" style="justify-content:flex-end;margin-top:8px">
+                <button id="btnCopy" class="btn gray">Copiar</button>
+                <button id="btnReset" class="btn dark">Novo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal da câmera -->
+    <div id="camModal" class="no-print" aria-hidden="true">
+        <div id="camBox">
+            <div style="display:grid;gap:8px">
+                <video id="video" playsinline></video>
+                <canvas id="canvas" style="display:none"></canvas>
+                <div class="actions" style="justify-content:flex-end">
+                    <button id="btnShot" class="btn red">Capturar</button>
+                    <button id="btnUse" class="btn dark" style="display:none">Usar foto</button>
+                    <button id="btnClose" class="btn gray">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Área de impressão (PDF) -->
+    <div id="printWrap" class="avoid-break">
+        <div id="printArea">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <div style="font-weight:800">Assistente de Diagnóstico</div>
+                <div style="font-weight:900;letter-spacing:1px">BRIDGESTONE</div>
+            </div>
+            <div style="font-weight:700" id="phHeader"></div>
+            <div id="phDefeito" style="margin:6px 0 4px">Defeito:</div>
+            <div id="phWO" class="small" style="margin:0 0 2px"></div>
+            <div id="phTec" class="small" style="margin:0 0 10px"></div>
+            <div id="phDiagramas" class="avoid-break"></div>
+            <div class="avoid-break">
+                <table style="width:100%;border-collapse:collapse;margin:10px 0" border="1" cellpadding="6">
+                    <thead><tr><th style="width:40%">Passo</th><th style="width:10%">Status</th><th>Observação</th></tr></thead>
+                    <tbody id="phTable"></tbody>
+                </table>
+            </div>
+            <div id="phFotosWrap" style="display:none;margin-top:12px">
+                <div style="font-weight:700;margin-bottom:6px">Fotos do diagnóstico</div>
+                <div class="print-photos" id="phFotos"></div>
+            </div>
+            <div style="font-weight:700;margin:10px 0 4px">Resumo para BAMM</div>
+            <pre id="phResumo" style="white-space:pre-wrap;margin:0"></pre>
+        </div>
+    </div>
+
+    <div id="toast" class="toast no-print" role="status" aria-live="polite">OK</div>
+
+    <script>
+        // Dados dos defeitos e checklists
+        const DATA = {
+            "defeitos": ["Abortou a Cura", "Falta de Cura"],
+            "itens_por_defeito": {
+                "Abortou a Cura": [
+                    {"PassoOrdem":1,"OQueVerificar":"Teste de vazamento","ComoVerificar":"Instalar tampão e executar teste; confirmar se o aborto ocorreu logo após a etapa de vazamento."},
+                    {"PassoOrdem":2,"OQueVerificar":"Válvula de descarga do shaping","ComoVerificar":"Checar passagem/obstrução; remover resíduos e garantir acionamento correto."},
+                    {"PassoOrdem":3,"OQueVerificar":"Condições do bladder","ComoVerificar":"Verificar se está solto, furado, mal posicionado ou com vedação comprometida."},
+                    {"PassoOrdem":4,"OQueVerificar":"Anéis e O'rings","ComoVerificar":"Inspecionar desgaste/cortes e montagem; reinstalar conforme procedimento."},
+                    {"PassoOrdem":5,"OQueVerificar":"Pressão do ar do timer (≈55 psi)","ComoVerificar":"Medir no bloco do timer; se baixo, procurar vazamentos na linha."},
+                    {"PassoOrdem":6,"OQueVerificar":"Solenoides e válvulas 5/2 do timer","ComoVerificar":"Verificar travamento de carretel/passa-ar; testar acionamentos."},
+                    {"PassoOrdem":7,"OQueVerificar":"Cartão de saída do timer (CLP)","ComoVerificar":"Monitorar saídas durante a cura; testar com tampão para falha intermitente."},
+                    {"PassoOrdem":8,"OQueVerificar":"Mangueiras/tubos do sistema interno","ComoVerificar":"Inspecionar layout, rachaduras, folgas ou vazamentos; substituir se necessário."},
+                    {"PassoOrdem":9,"OQueVerificar":"Obstrução em transmissores de pressão","ComoVerificar":"Conferir leitura; desobstruir linha de sinal e checar conectores."},
+                    {"PassoOrdem":10,"OQueVerificar":"Sistema de segurança/acionamento","ComoVerificar":"Confirmar retornos OK de atuadores e sensores; limites de prensa."},
+                    {"PassoOrdem":11,"OQueVerificar":"Limite pneumático","ComoVerificar":"Verificar liberação de ar quando acionado; checar atuador e vazamentos."},
+                    {"PassoOrdem":12,"OQueVerificar":"Relés de acionamento das válvulas","ComoVerificar":"Testar relés do timer/blocos; substituir se sem pulso ou travados."}
+                ],
+                "Falta de Cura": [
+                    {"PassoOrdem":1,"Tipo":"DIAGRAMA","Alvo":"Molde Esquerdo","Unidade":"°F"},
+                    {"PassoOrdem":1,"Tipo":"DIAGRAMA","Alvo":"Molde Direito","Unidade":"°F"},
+                    {"PassoOrdem":1,"Tipo":"DIAGRAMA","Alvo":"Platen Esquerdo","Unidade":"°F"},
+                    {"PassoOrdem":1,"Tipo":"DIAGRAMA","Alvo":"Platen Direito","Unidade":"°F"},
+                    {"PassoOrdem":2,"OQueVerificar":"Válvulas manuais da prensa","ComoVerificar":"Conferir posição de funcionamento. Garantir abertura total; verificar alavanca/manopla."},
+                    {"PassoOrdem":3,"OQueVerificar":"Válvulas manuais do Trench","ComoVerificar":"Conferir posição de funcionamento. Garantir abertura total; verificar alavanca/manopla."},
+                    {"PassoOrdem":4,"OQueVerificar":"Mangueiras de entrada e retorno (sistema interno)","ComoVerificar":"Verificar layout, integridade e vazamentos; procurar achatamentos/torções."},
+                    {"PassoOrdem":5,"OQueVerificar":"Mangueiras da chapa e do molde","ComoVerificar":"Verificar layout, integridade e vazamentos; procurar achatamentos/torções."},
+                    {"PassoOrdem":6,"OQueVerificar":"Bladders (condição geral)","ComoVerificar":"Inspecionar furos, desgaste e fixação."},
+                    {"PassoOrdem":7,"OQueVerificar":"Inspeção do pistão e passagem de água","ComoVerificar":"Inspecionar sinais de vazamento, passagem no pistão, verificar êmbolos e vedações."},
+                    {"PassoOrdem":8,"OQueVerificar":"Inspeção de vazamentos gerais: mecanismo central, carregadores, descarregador, molde segmentado etc.","ComoVerificar":"Inspecionar sinais de vazamento, mangueiras furadas, conectores danificados, cilindros etc."},
+                    {"PassoOrdem":9,"OQueVerificar":"Drenos e purgadores","ComoVerificar":"Abrir purgador; verificar saída de condensado e fechamento."},
+                    {"PassoOrdem":10,"OQueVerificar":"Checagem de sensores de temperatura/pressão","ComoVerificar":"Comparar leituras com valores de referência; verificar cabos, conectores."},
+                    {"PassoOrdem":11,"OQueVerificar":"Análise dos gráficos de temperatura e pressão (IHM/CCM)","ComoVerificar":"Comparar curvas com parâmetros da carta; buscar anomalias."},
+                    {"PassoOrdem":12,"OQueVerificar":"Confirmação do tempo de cura","ComoVerificar":"Verificar tempo no IHM e comparar com a carta."},
+                    {"PassoOrdem":13,"OQueVerificar":"Aquecimento inicial antes do ciclo","ComoVerificar":"Confirmar se o aquecimento da prensa foi realizado corretamente, antes do carregamento."}
+                ]
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const $ = s => document.querySelector(s);
+            const $$ = s => Array.from(document.querySelectorAll(s));
+            const toast = $("#toast");
+            const showToast = (t) => { toast.textContent = t; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 3000); };
+
+            let ITEMS = [], DEF_ATUAL = "", PHOTOS = [], stream = null;
+
+            // DIAGRAMAS
+            function buildCircle(idPrefix) {
+                const circle = document.createElement('div');
+                circle.className = 'circle';
+                circle.innerHTML = `
+                    <div class="axis"></div><div class="axis h"></div>
+                    <div class="qwrap top"><input id="${idPrefix}_top" class="q" inputmode="decimal"><span class="unit">°F</span></div>
+                    <div class="qwrap right"><input id="${idPrefix}_right" class="q" inputmode="decimal"><span class="unit">°F</span></div>
+                    <div class="qwrap bottom"><input id="${idPrefix}_bottom" class="q" inputmode="decimal"><span class="unit">°F</span></div>
+                    <div class="qwrap left"><input id="${idPrefix}_left" class="q" inputmode="decimal"><span class="unit">°F</span></div>`;
+                return circle;
+            }
+
+            function renderDiagGroup() {
+                const wrap = document.createElement('div');
+                wrap.className = 'item avoid-break';
+                wrap.innerHTML = `<div class="title">1. Medição de temperatura do molde e platen com termo visor</div>
+                                  <div class="how"><strong>Como verificar:</strong> Medir 4 pontos com termo visor; comparar com carta (Exemplo: ~290°F); registrar no diagrama.</div>`;
+                
+                const grid = document.createElement('div');
+                grid.className = 'diagram-grid';
+                
+                const block = (titulo, idPrefix) => {
+                    const holder = document.createElement('div');
+                    holder.className = 'diag-block';
+                    const h = document.createElement('div');
+                    h.textContent = titulo;
+                    h.className = 'diag-title';
+                    holder.append(h);
+                    holder.append(buildCircle(idPrefix));
+                    return holder;
+                };
+                
+                grid.append(block('Molde Esquerdo', 'diag1'));
+                grid.append(block('Molde Direito', 'diag2'));
+                grid.append(block('Platen Esquerdo', 'diag3'));
+                grid.append(block('Platen Direito', 'diag4'));
+                wrap.append(grid);
+                
+                const note = document.createElement('div');
+                note.className = 'small';
+                note.textContent = 'Obs.: estes campos não entram na contagem de progresso e não exigem OK/NOK.';
+                wrap.append(note);
+                
+                return wrap;
+            }
+
+            function renderChecklist() {
+                $("#chkTitle").textContent = "Checklist – " + DEF_ATUAL;
+                const lista = $("#lista");
+                lista.innerHTML = "";
+                
+                if (DEF_ATUAL === "Falta de Cura") {
+                    lista.append(renderDiagGroup());
+                }
+                
+                ITEMS.forEach((it, idx) => {
+                    if (it.Tipo === "DIAGRAMA") return;
+                    
+                    const el = document.createElement('div');
+                    el.className = 'item';
+                    el.innerHTML = `<div class="title">${it.PassoOrdem}. ${it.OQueVerificar}</div>
+                        ${it.ComoVerificar ? `<div class="how"><strong>Como verificar:</strong> ${it.ComoVerificar}</div>` : ""}
+                        <div class="small" style="margin-top:6px">
+                            <label><input type="radio" name="r${idx}" value="OK"> OK</label>
+                            <label style="margin-left:10px"><input type="radio" name="r${idx}" value="NOK"> NOK</label>
+                            <label style="margin-left:10px"><input type="radio" name="r${idx}" value="NA"> N.A.</label>
+                        </div>
+                        <textarea class="obs" placeholder="Observação (obrigatória se marcar NOK)"></textarea>`;
+                    lista.append(el);
+                });
+                
+                const total = ITEMS.filter(it => it.Tipo !== "DIAGRAMA").length;
+                $("#total").textContent = total;
+                $("#done").textContent = 0;
+                $("#bar").style.width = '0%';
+                
+                $("#lista").addEventListener('change', (e) => {
+                    if (e.target && e.target.matches('input[type=radio]')) {
+                        const cont = e.target.closest('.item');
+                        const area = cont?.querySelector('.obs');
+                        if (area && e.target.value !== 'NOK') {
+                            area.classList.remove('error');
+                            cont.classList.remove('error');
+                        }
+                        updateProgress();
+                    }
+                });
+                
+                Array.from(document.querySelectorAll('.obs')).forEach(t => {
+                    t.addEventListener('input', () => {
+                        t.classList.remove('error');
+                        t.closest('.item').classList.remove('error');
+                        t.style.height = 'auto';
+                        t.style.height = t.scrollHeight + 'px';
+                    });
+                });
+            }
+
+            function updateProgress() {
+                const total = ITEMS.filter(it => it.Tipo !== "DIAGRAMA").length;
+                const checked = $$("#lista input[type=radio]:checked").length;
+                $("#done").textContent = checked;
+                $("#bar").style.width = (total ? Math.round(100 * checked / total) : 0) + '%';
+            }
+
+            function validarCamposIniciais() {
+                const wo = $("#inpWO"), tec = $("#inpTec"), sel = $("#selDef");
+                [wo, tec, sel].forEach(el => el.classList.remove('error'));
+                
+                let ok = true;
+                if (!wo.value.trim()) { wo.classList.add('error'); if (ok) wo.focus(); ok = false; }
+                if (!tec.value.trim()) { tec.classList.add('error'); if (ok) tec.focus(); ok = false; }
+                if (!sel.value.trim()) { sel.classList.add('error'); if (ok) sel.focus(); ok = false; }
+                
+                if (!ok) { showToast('Preencha WO, Técnico e selecione o defeito.'); }
+                return ok;
+            }
+
+            function validarNOK() {
+                const cards = $$("#lista .item");
+                let erros = [];
+                
+                cards.forEach((card) => {
+                    const sel = card.querySelector('input[type=radio]:checked');
+                    const obs = card.querySelector('.obs');
+                    const v = sel ? sel.value : "";
+                    const o = (obs?.value || "").trim();
+                    if (v === "NOK" && o.length === 0) {
+                        erros.push(card);
+                        obs?.classList.add('error');
+                        card.classList.add('error');
+                    }
+                });
+                
+                if (erros.length) {
+                    const card = erros[0];
+                    card.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    const area = card.querySelector('.obs');
+                    area?.focus();
+                    showToast('Preencha a Observação onde marcou NOK.');
+                    return false;
+                }
+                return true;
+            }
+
+            function getDiagramValues() {
+                if (DEF_ATUAL !== "Falta de Cura") return null;
+                const take = (id) => (document.getElementById(id)?.value || "").trim();
+                return {
+                    "Molde Esquerdo": {Superior: take("diag1_top"), Direita: take("diag1_right"), Inferior: take("diag1_bottom"), Esquerda: take("diag1_left")},
+                    "Molde Direito": {Superior: take("diag2_top"), Direita: take("diag2_right"), Inferior: take("diag2_bottom"), Esquerda: take("diag2_left")},
+                    "Platen Esquerdo": {Superior: take("diag3_top"), Direita: take("diag3_right"), Inferior: take("diag3_bottom"), Esquerda: take("diag3_left")},
+                    "Platen Direito": {Superior: take("diag4_top"), Direita: take("diag4_right"), Inferior: take("diag4_bottom"), Esquerda: take("diag4_left")}
+                };
+            }
+
+            function buildResumo() {
+                if (!validarCamposIniciais()) return;
+                if (!validarNOK()) return;
+
+                const cards = $$("#lista .item");
+                const now = new Date();
+                const dd = String(now.getDate()).padStart(2, '0');
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const yyyy = now.getFullYear();
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mi = String(now.getMinutes()).padStart(2, '0');
+                const header = `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+                const wo = ($("#inpWO").value || "").trim();
+                const tec = ($("#inpTec").value || "").trim();
+                
+                let parts = [header, (wo ? `WO: ${wo}` : ""), (tec ? `Técnico: ${tec}` : "")].filter(Boolean);
+                let txt = parts.join(" | ") + "\\n\\n";
+
+                if (DEF_ATUAL === "Falta de Cura") {
+                    const d = getDiagramValues();
+                    const addBlock = (titulo, obj) => {
+                        txt += `${titulo}:\\n`;
+                        txt += ` - Superior: ${obj.Superior}°F\\n`;
+                        txt += ` - Direita: ${obj.Direita}°F\\n`;
+                        txt += ` - Inferior: ${obj.Inferior}°F\\n`;
+                        txt += ` - Esquerda: ${obj.Esquerda}°F\\n\\n`;
+                    };
+                    addBlock("Molde Esquerdo", d["Molde Esquerdo"]);
+                    addBlock("Molde Direito", d["Molde Direito"]);
+                    addBlock("Platen Esquerdo", d["Platen Esquerdo"]);
+                    addBlock("Platen Direito", d["Platen Direito"]);
+                }
+
+                const linhasAp = [];
+                cards.forEach(card => {
+                    const title = card.querySelector('.title')?.textContent || "";
+                    const sel = card.querySelector('input[type=radio]:checked');
+                    const v = sel ? sel.value : "";
+                    const o = (card.querySelector('.obs')?.value || "").trim();
+                    if (v === "NOK" || o.length > 0) {
+                        const label = title.replace(/^\\d+\\.\\s*/, '');
+                        const obsTxt = o ? ` | Obs.: ${o}` : "";
+                        linhasAp.push(`- ${label}${obsTxt}`);
+                    }
+                });
+                
+                if (linhasAp.length) {
+                    txt += "Outros apontamentos:\\n" + linhasAp.join("\\n");
+                }
+
+                const out = $("#out");
+                out.value = txt;
+                out.style.height = 'auto';
+                out.style.height = out.scrollHeight + 'px';
+                $("#cardOut").style.display = "block";
+                window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});
+            }
+
+            function slugify(s) {
+                const map = {'Á':'A','À':'A','Â':'A','Ã':'A','Ä':'A','á':'a','à':'a','â':'a','ã':'a','ä':'a','É':'E','È':'E','Ê':'E','Ë':'E','é':'e','è':'e','ê':'e','ë':'e','Í':'I','Ì':'I','Î':'I','Ï':'I','í':'i','ì':'i','î':'i','ï':'i','Ó':'O','Ò':'O','Ô':'O','Õ':'O','Ö':'O','ó':'o','ò':'o','ô':'o','õ':'o','ö':'o','Ú':'U','Ù':'U','Û':'U','Ü':'U','ú':'u','ù':'u','û':'u','ü':'u','Ç':'C','ç':'c','Ñ':'N','ñ':'n'};
+                return s.split('').map(ch => map[ch] || ch).join('').replace(/[^A-Za-z0-9\-]+/g, ' ').trim().replace(/\\s+/g, '_');
+            }
+
+            // FOTOS
+            function addPhotoDataURL(dataURL) {
+                PHOTOS.push({dataURL, caption: ""});
+                renderPhotoList();
+            }
+            function addPhoto(file) {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = e => addPhotoDataURL(e.target.result);
+                reader.readAsDataURL(file);
+            }
+            function renderPhotoList() {
+                const box = document.getElementById('photoList');
+                box.innerHTML = "";
+                PHOTOS.forEach((ph, i) => {
+                    const row = document.createElement('div');
+                    row.className = 'photo-row';
+                    const img = document.createElement('img');
+                    img.src = ph.dataURL;
+                    row.append(img);
+                    
+                    const right = document.createElement('div');
+                    right.innerHTML = `<textarea class="input caption" placeholder="Descreva o que esta foto mostra...">${ph.caption || ""}</textarea>
+                                       <div class="actions" style="margin-top:6px">
+                                         <button class="btn gray" data-del="${i}">Remover</button>
+                                       </div>`;
+                    row.append(right);
+                    box.append(row);
+                    
+                    right.querySelector('.caption').addEventListener('input', (e) => {
+                        PHOTOS[i].caption = e.target.value;
+                    });
+                    
+                    right.querySelector('[data-del]').addEventListener('click', () => {
+                        PHOTOS.splice(i, 1);
+                        renderPhotoList();
+                    });
+                });
+            }
+            document.getElementById('filePhoto').addEventListener('change', (e) => addPhoto(e.target.files?.[0]));
+
+            // CÂMERA
+            const camModal = document.getElementById('camModal');
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const btnCam = document.getElementById('btnCam');
+            const btnShot = document.getElementById('btnShot');
+            const btnUse = document.getElementById('btnUse');
+            const btnClose = document.getElementById('btnClose');
+
+            async function openCamera() {
+                try {
+                    const constraints = { video: { facingMode: { ideal: "environment" } }, audio: false };
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        showToast("Sem acesso à câmera; use Anexar imagem.");
+                        return;
+                    }
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    video.srcObject = stream;
+                    await video.play();
+                    canvas.style.display = "none";
+                    video.style.display = "block";
+                    btnUse.style.display = "none";
+                    btnShot.style.display = "inline-flex";
+                    camModal.style.display = "flex";
+                } catch(e) {
+                    showToast("Sem acesso à câmera; verifique as permissões do navegador.");
+                }
+            }
+            btnCam.addEventListener('click', openCamera);
+            btnClose.addEventListener('click', () => {
+                if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+                camModal.style.display = "none";
+            });
+            btnShot.addEventListener('click', () => {
+                const w = video.videoWidth, h = video.videoHeight;
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, w, h);
+                canvas.style.display = "block";
+                video.style.display = "none";
+                btnUse.style.display = "inline-flex";
+                btnShot.style.display = "none";
+            });
+            btnUse.addEventListener('click', () => {
+                const dataURL = canvas.toDataURL('image/jpeg', 0.9);
+                addPhotoDataURL(dataURL);
+                btnClose.click();
+            });
+
+            // PDF
+            function montarPDF() {
+                if (!validarCamposIniciais()) return;
+                if (!validarNOK()) return;
+                
+                const cards = Array.from(document.querySelectorAll('#lista .item'));
+                const phTable = document.getElementById('phTable');
+                phTable.innerHTML = "";
+                
+                cards.forEach(card => {
+                    const title = card.querySelector('.title')?.textContent || "";
+                    const sel = card.querySelector('input[type=radio]:checked');
+                    const v = sel ? sel.value : "";
+                    const o = (card.querySelector('.obs')?.value || "").trim();
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${title.replace(/^\\d+\\.\\s*/, '')}</td><td>${v || "-"}</td><td>${o}</td>`;
+                    phTable.append(tr);
+                });
+                
+                const now = new Date();
+                const dd = String(now.getDate()).padStart(2, '0');
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const yyyy = now.getFullYear();
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mi = String(now.getMinutes()).padStart(2, '0');
+                
+                document.getElementById('phHeader').textContent = `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+                const woTxt = (document.getElementById('inpWO').value || "-");
+                const tecTxt = (document.getElementById('inpTec').value || "-");
+                document.getElementById('phWO').textContent = "WO: " + woTxt;
+                document.getElementById('phTec').textContent = "Técnico: " + tecTxt;
+                document.getElementById('phDefeito').textContent = "Defeito: " + DEF_ATUAL;
+                
+                const phDiagramas = document.getElementById('phDiagramas');
+                phDiagramas.innerHTML = "";
+                
+                if (DEF_ATUAL === "Falta de Cura") {
+                    const d = {
+                        "Molde Esquerdo": {
+                            Superior: document.getElementById('diag1_top')?.value,
+                            Direita: document.getElementById('diag1_right')?.value,
+                            Inferior: document.getElementById('diag1_bottom')?.value,
+                            Esquerda: document.getElementById('diag1_left')?.value
+                        },
+                        "Molde Direito": {
+                            Superior: document.getElementById('diag2_top')?.value,
+                            Direita: document.getElementById('diag2_right')?.value,
+                            Inferior: document.getElementById('diag2_bottom')?.value,
+                            Esquerda: document.getElementById('diag2_left')?.value
+                        },
+                        "Platen Esquerdo": {
+                            Superior: document.getElementById('diag3_top')?.value,
+                            Direita: document.getElementById('diag3_right')?.value,
+                            Inferior: document.getElementById('diag3_bottom')?.value,
+                            Esquerda: document.getElementById('diag3_left')?.value
+                        },
+                        "Platen Direito": {
+                            Superior: document.getElementById('diag4_top')?.value,
+                            Direita: document.getElementById('diag4_right')?.value,
+                            Inferior: document.getElementById('diag4_bottom')?.value,
+                            Esquerda: document.getElementById('diag4_left')?.value
+                        }
+                    };
+                    
+                    const grid = document.createElement('div');
+                    grid.className = 'diagram-grid avoid-break';
+                    
+                    const buildPrintCircle = (titulo, vals) => {
+                        const box = document.createElement('div');
+                        box.className = 'diag-block print-diagram';
+                        const h = document.createElement('div');
+                        h.className = 'diag-title';
+                        h.textContent = titulo;
+                        box.append(h);
+                        
+                        const c = document.createElement('div');
+                        c.className = 'circle';
+                        c.style.position = 'relative';
+                        c.innerHTML = '<div class="axis"></div><div class="axis h"></div>';
+                        
+                        const mk = (cls, txt) => {
+                            const s = document.createElement('span');
+                            s.className = 'qval ' + cls;
+                            s.textContent = txt;
+                            return s;
+                        };
+                        
+                        c.append(mk('top', (vals.Superior || '') + '°F'));
+                        c.append(mk('right', (vals.Direita || '') + '°F'));
+                        c.append(mk('bottom', (vals.Inferior || '') + '°F'));
+                        c.append(mk('left', (vals.Esquerda || '') + '°F'));
+                        box.append(c);
+                        return box;
+                    };
+                    
+                    grid.append(buildPrintCircle('Molde Esquerdo', d["Molde Esquerdo"]));
+                    grid.append(buildPrintCircle('Molde Direito', d["Molde Direito"]));
+                    grid.append(buildPrintCircle('Platen Esquerdo', d["Platen Esquerdo"]));
+                    grid.append(buildPrintCircle('Platen Direito', d["Platen Direito"]));
+                    phDiagramas.append(grid);
+                }
+                
+                const wrapFotos = document.getElementById('phFotosWrap');
+                const gridFotos = document.getElementById('phFotos');
+                gridFotos.innerHTML = "";
+                
+                if (PHOTOS.length) {
+                    wrapFotos.style.display = 'block';
+                    PHOTOS.forEach(p => {
+                        const fig = document.createElement('figure');
+                        const im = document.createElement('img');
+                        im.src = p.dataURL;
+                        fig.append(im);
+                        const cap = document.createElement('figcaption');
+                        cap.textContent = p.caption || '';
+                        fig.append(cap);
+                        gridFotos.append(fig);
+                    });
+                } else { wrapFotos.style.display = 'none'; }
+                
+                document.getElementById('phResumo').textContent = document.getElementById('out').value.trim();
+                
+                const defeito = (DEF_ATUAL || 'Defeito').replace(/\\s+/g, '-');
+                const safeTec = slugify(tecTxt);
+                const dataStr = `${dd}-${mm}-${yyyy}_${hh}h${mi}`;
+                const fname = `WO-${slugify(woTxt)}_${safeTec}_${defeito}_${dataStr}.pdf`;
+                const prevTitle = document.title;
+                document.title = fname.replace(/\\.pdf$/, '');
+                
+                // Garantir que o grid não quebre no meio em navegadores móveis
+                document.querySelectorAll('.diagram-grid').forEach(el => {
+                    el.style.pageBreakInside = 'avoid';
+                    el.style.breakInside = 'avoid';
+                });
+                
+                const showSavedToast = () => {
+                    showToast(`Salvo: ${fname}`);
+                    window.removeEventListener('afterprint', showSavedToast);
+                    document.title = prevTitle;
+                };
+                
+                window.addEventListener('afterprint', showSavedToast);
+                setTimeout(() => { window.print(); }, 40);
+            }
+
+            // EVENTOS PRINCIPAIS
+            document.getElementById('btnGo').addEventListener('click', () => {
+                if (!validarCamposIniciais()) return;
+                DEF_ATUAL = document.getElementById('selDef').value;
+                ITEMS = (DATA.itens_por_defeito[DEF_ATUAL] || []);
+                renderChecklist();
+                document.getElementById('cardChk').style.display = 'block';
+                document.getElementById('cardOut').style.display = 'none';
+                document.getElementById('cardChk').scrollIntoView({behavior: 'smooth', block: 'start'});
+            });
+
+            document.getElementById('btnResumo').addEventListener('click', () => { buildResumo(); });
+            document.getElementById('btnPDF').addEventListener('click', montarPDF);
+            
+            document.getElementById('btnCopy').addEventListener('click', () => {
+                const txt = document.getElementById('out').value;
+                const done = () => { showToast('Copiado!'); };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(txt).then(done).catch(() => {});
+                } else {
+                    const out = document.getElementById('out');
+                    out.select();
+                    document.execCommand('copy');
+                    done();
+                }
+            });
+            
+            document.getElementById('btnReset')?.addEventListener('click', () => location.reload());
+            
+            document.getElementById('btnClear')?.addEventListener('click', () => {
+                document.getElementById('inpWO').value = "";
+                document.getElementById('inpTec').value = "";
+                document.getElementById('selDef').value = "";
+                document.getElementById('lista').innerHTML = "";
+                document.getElementById('cardChk').style.display = 'none';
+                document.getElementById('done').textContent = "0";
+                document.getElementById('total').textContent = "0";
+                document.getElementById('bar').style.width = "0%";
+                document.getElementById('out').value = "";
+                document.getElementById('cardOut').style.display = 'none';
+                PHOTOS = [];
+                document.getElementById('photoList').innerHTML = "";
+                window.scrollTo({top: 0, behavior: 'smooth'});
+            });
+            
+            ['inpWO', 'inpTec', 'selDef'].forEach(id => {
+                document.getElementById(id).addEventListener('input', e => { e.target.classList.remove('error'); });
+            });
+        });
+    </script>
+</body>
+</html>
