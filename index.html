@@ -111,7 +111,9 @@
         .progress>span { display: block; height: 100%; background: var(--accent); width: 0%; }
         
         .photo-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: start; margin-bottom: 10px; }
-        .photo-row img { width: 120px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+        .photo-row img { object-fit: contain; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+        .photo-row img.portrait { width: 90px; height: 120px; }
+        .photo-row img.landscape { width: 120px; height: 90px; }
         .photo-row .caption { width: 100%; min-height: 40px; }
         
         /* === DIAGRAMAS: CENTRALIZADOS E ESTÁVEIS NO MOBILE === */
@@ -190,11 +192,30 @@
         .print-diagram .qval.left { left: 20%; top: 50%; }
         
         .print-photos {
-            display: grid; grid-template-columns: repeat(2,minmax(260px,1fr)); gap: 16px; margin-top: 8px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(280px, 1fr));
+            gap: 18px 20px;
+            margin-top: 8px;
+        }
+        .print-photos figure {
+            margin: 0;
+            break-inside: avoid;
+            page-break-inside: avoid;
         }
         .print-photos img {
-            width: 100%; height: 300px;   /* imagens maiores no PDF */
-            object-fit: cover; border: 1px solid #bbb; border-radius: 8px;
+            width: 100%;
+            height: auto;
+            object-fit: contain; /* mostra a foto inteira, sem recortar bordas */
+            object-position: center;
+            background: #fff;
+            border: 1px solid #bbb;
+            border-radius: 8px;
+        }
+        /* Formato automático no PDF: retrato = 3:4; paisagem/tela larga = 4:3. */
+        .print-photos img.portrait { aspect-ratio: 3 / 4; }
+        .print-photos img.landscape { aspect-ratio: 4 / 3; }
+        .print-photos figcaption {
+            margin-top: 4px;
         }
         
         .toast {
@@ -238,6 +259,44 @@
                 <option value="Abortou a Cura">Abortou a Cura</option>
                 <option value="Falta de Cura">Falta de Cura</option>
             </select>
+
+            <!-- Campos adicionais do cabeçalho, exclusivos para Falta de Cura -->
+            <div id="fcHeaderFields" style="display:none;margin-top:14px">
+                <div class="row">
+                    <div>
+                        <label class="small">RL</label>
+                        <input id="inpRL" class="input" placeholder="Ex.: 12345">
+                    </div>
+                    <div>
+                        <label class="small">Prensa</label>
+                        <input id="inpPrensa" class="input" placeholder="Ex.: E-09/10">
+                    </div>
+                </div>
+                <div class="row" style="margin-top:12px">
+                    <div>
+                        <label class="small">Lado</label>
+                        <input id="inpLado" class="input" placeholder="Ex.: Esquerdo / Direito">
+                    </div>
+                    <div>
+                        <label class="small">Turno</label>
+                        <input id="inpTurno" class="input" placeholder="Ex.: 3º turno">
+                    </div>
+                </div>
+                <div class="row" style="margin-top:12px">
+                    <div>
+                        <label class="small">Grupo</label>
+                        <input id="inpGrupo" class="input" placeholder="Ex.: A">
+                    </div>
+                    <div>
+                        <label class="small">Pneu</label>
+                        <input id="inpPneu" class="input" placeholder="Ex.: medida / especificação">
+                    </div>
+                </div>
+                <div style="margin-top:12px">
+                    <label class="small">Data do Setup</label>
+                    <input id="inpDataSetup" class="input" type="date">
+                </div>
+            </div>
             <div class="actions" style="justify-content:flex-end;margin-top:10px">
                 <button id="btnGo" class="btn dark">Avançar</button>
             </div>
@@ -260,6 +319,7 @@
                     </svg>
                     Anexar imagem
                     <input id="filePhoto" type="file" accept="image/*" hidden>
+                    <input id="cameraPhoto" type="file" accept="image/*" capture="environment" hidden>
                 </label>
                 <button id="btnCam" class="btn gray icon" title="Abrir câmera">
                     <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -267,6 +327,7 @@
                     </svg>
                     Tirar foto
                 </button>
+                <button id="btnDownloadAll" class="btn gray" disabled>Baixar todas as fotos</button>
                 <button id="btnResumo" class="btn red">Gerar resumo para o BAMM</button>
                 <button id="btnPDF" class="btn dark">Salvar PDF</button>
             </div>
@@ -309,7 +370,8 @@
             <div style="font-weight:700" id="phHeader"></div>
             <div id="phDefeito" style="margin:6px 0 4px">Defeito:</div>
             <div id="phWO" class="small" style="margin:0 0 2px"></div>
-            <div id="phTec" class="small" style="margin:0 0 10px"></div>
+            <div id="phTec" class="small" style="margin:0 0 4px"></div>
+            <div id="phExtraHeader" class="small avoid-break" style="display:none;margin:0 0 10px;line-height:1.6"></div>
             <div id="phDiagramas" class="avoid-break"></div>
             <div class="avoid-break">
                 <table style="width:100%;border-collapse:collapse;margin:10px 0" border="1" cellpadding="6">
@@ -533,6 +595,25 @@
                 };
             }
 
+            function getFaltaCuraHeader() {
+                const take = (id) => (document.getElementById(id)?.value || "").trim();
+                return {
+                    RL: take("inpRL"),
+                    Prensa: take("inpPrensa"),
+                    Lado: take("inpLado"),
+                    Turno: take("inpTurno"),
+                    Grupo: take("inpGrupo"),
+                    Pneu: take("inpPneu"),
+                    DataSetup: take("inpDataSetup")
+                };
+            }
+
+            function formatDataBR(iso) {
+                if (!iso) return "";
+                const p = iso.split('-');
+                return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
+            }
+
             function buildResumo() {
                 if (!validarCamposIniciais()) return;
                 if (!validarNOK()) return;
@@ -549,16 +630,30 @@
                 const tec = ($("#inpTec").value || "").trim();
                 
                 let parts = [header, (wo ? `WO: ${wo}` : ""), (tec ? `Técnico: ${tec}` : "")].filter(Boolean);
-                let txt = parts.join(" | ") + "\\n\\n";
+                let txt = parts.join(" | ") + "\n\n";
 
                 if (DEF_ATUAL === "Falta de Cura") {
+                    const h = getFaltaCuraHeader();
+                    const cabecalhoFC = [
+                        h.RL ? `RL: ${h.RL}` : "",
+                        h.Prensa ? `Prensa: ${h.Prensa}` : "",
+                        h.Lado ? `Lado: ${h.Lado}` : "",
+                        h.Turno ? `Turno: ${h.Turno}` : "",
+                        h.Grupo ? `Grupo: ${h.Grupo}` : "",
+                        h.Pneu ? `Pneu: ${h.Pneu}` : "",
+                        h.DataSetup ? `Data do Setup: ${formatDataBR(h.DataSetup)}` : ""
+                    ].filter(Boolean);
+                    if (cabecalhoFC.length) {
+                        txt += cabecalhoFC.join(" | ") + "\n\n";
+                    }
+
                     const d = getDiagramValues();
                     const addBlock = (titulo, obj) => {
-                        txt += `${titulo}:\\n`;
-                        txt += ` - Superior: ${obj.Superior}°F\\n`;
-                        txt += ` - Direita: ${obj.Direita}°F\\n`;
-                        txt += ` - Inferior: ${obj.Inferior}°F\\n`;
-                        txt += ` - Esquerda: ${obj.Esquerda}°F\\n\\n`;
+                        txt += `${titulo}:\n`;
+                        txt += ` - Superior: ${obj.Superior}°F\n`;
+                        txt += ` - Direita: ${obj.Direita}°F\n`;
+                        txt += ` - Inferior: ${obj.Inferior}°F\n`;
+                        txt += ` - Esquerda: ${obj.Esquerda}°F\n\n`;
                     };
                     addBlock("Molde Esquerdo", d["Molde Esquerdo"]);
                     addBlock("Molde Direito", d["Molde Direito"]);
@@ -580,7 +675,7 @@
                 });
                 
                 if (linhasAp.length) {
-                    txt += "Outros apontamentos:\\n" + linhasAp.join("\\n");
+                    txt += "Outros apontamentos:\n" + linhasAp.join("\n");
                 }
 
                 const out = $("#out");
@@ -596,30 +691,214 @@
                 return s.split('').map(ch => map[ch] || ch).join('').replace(/[^A-Za-z0-9\-]+/g, ' ').trim().replace(/\\s+/g, '_');
             }
 
-            // FOTOS
-            function addPhotoDataURL(dataURL) {
-                PHOTOS.push({dataURL, caption: ""});
-                renderPhotoList();
+            // FOTOS - otimizadas antes de serem armazenadas/levadas ao PDF
+            // 1600 px no maior lado e JPEG 76% mantem boa leitura no relatorio,
+            // mas reduz drasticamente o tamanho do PDF em comparacao com a foto original.
+            const PHOTO_MAX_DIMENSION = 1600;
+            const PHOTO_JPEG_QUALITY = 0.76;
+
+            function comprimirImagem(dataURL) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        try {
+                            const maiorLado = Math.max(img.naturalWidth, img.naturalHeight);
+                            const escala = maiorLado > PHOTO_MAX_DIMENSION
+                                ? PHOTO_MAX_DIMENSION / maiorLado
+                                : 1;
+                            const w = Math.max(1, Math.round(img.naturalWidth * escala));
+                            const h = Math.max(1, Math.round(img.naturalHeight * escala));
+
+                            const c = document.createElement('canvas');
+                            c.width = w;
+                            c.height = h;
+                            const ctx = c.getContext('2d', { alpha: false });
+                            if (!ctx) throw new Error('Canvas indisponivel');
+
+                            // Fundo branco evita fundo preto ao converter PNG/transparencia para JPEG.
+                            ctx.fillStyle = '#fff';
+                            ctx.fillRect(0, 0, w, h);
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                            ctx.drawImage(img, 0, 0, w, h);
+
+                            resolve({ dataURL: c.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY), width: w, height: h });
+                        } catch (err) {
+                            reject(err);
+                        }
+                    };
+                    img.onerror = () => reject(new Error('Nao foi possivel ler a imagem'));
+                    img.src = dataURL;
+                });
             }
+
+            async function addPhotoDataURL(dataURL) {
+                try {
+                    const otimizada = await comprimirImagem(dataURL);
+                    PHOTOS.push({
+                        dataURL: otimizada.dataURL,
+                        width: otimizada.width,
+                        height: otimizada.height,
+                        orientation: otimizada.width > otimizada.height ? 'landscape' : 'portrait',
+                        caption: ""
+                    });
+                    renderPhotoList();
+                    showToast('Imagem otimizada e anexada.');
+                } catch (e) {
+                    console.error(e);
+                    showToast('Nao foi possivel processar esta imagem.');
+                }
+            }
+
             function addPhoto(file) {
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = e => addPhotoDataURL(e.target.result);
+                reader.onload = async e => {
+                    await addPhotoDataURL(e.target.result);
+                    document.getElementById('filePhoto').value = '';
+                };
+                reader.onerror = () => showToast('Nao foi possivel ler esta imagem.');
                 reader.readAsDataURL(file);
             }
+            function dataURLParaBlob(dataURL) {
+                const partes = dataURL.split(',');
+                const mime = (partes[0].match(/data:([^;]+)/) || [,'image/jpeg'])[1];
+                const bin = atob(partes[1] || '');
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return new Blob([bytes], { type: mime });
+            }
+
+            function nomeFoto(i, ph) {
+                const wo = slugify((document.getElementById('inpWO')?.value || 'sem-WO').trim()) || 'sem-WO';
+                const n = String(i + 1).padStart(2, '0');
+                const legenda = slugify((ph?.caption || '').trim()).slice(0, 55);
+                return `WO-${wo}_foto-${n}${legenda ? '_' + legenda : ''}.jpg`;
+            }
+
+            function baixarBlob(blob, nome) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = nome;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+            }
+
+            function baixarFoto(i) {
+                const ph = PHOTOS[i];
+                if (!ph) return;
+                baixarBlob(dataURLParaBlob(ph.dataURL), nomeFoto(i, ph));
+                showToast('Foto salva.');
+            }
+
+            // Cria um ZIP simples (sem recomprimir os JPEGs) para baixar todas as fotos em um único arquivo.
+            const CRC_TABLE = (() => {
+                const table = new Uint32Array(256);
+                for (let n = 0; n < 256; n++) {
+                    let c = n;
+                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                    table[n] = c >>> 0;
+                }
+                return table;
+            })();
+
+            function crc32(bytes) {
+                let c = 0xFFFFFFFF;
+                for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+                return (c ^ 0xFFFFFFFF) >>> 0;
+            }
+
+            function u16(n) { return new Uint8Array([n & 255, (n >>> 8) & 255]); }
+            function u32(n) { return new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]); }
+            function concatBytes(parts) {
+                const total = parts.reduce((s, p) => s + p.length, 0);
+                const out = new Uint8Array(total);
+                let off = 0;
+                parts.forEach(p => { out.set(p, off); off += p.length; });
+                return out;
+            }
+            function blobParaBytes(blob) { return blob.arrayBuffer().then(b => new Uint8Array(b)); }
+
+            async function criarZipFotos() {
+                const enc = new TextEncoder();
+                const locais = [], centrais = [];
+                let offset = 0;
+                const agora = new Date();
+                const dosTime = ((agora.getHours() & 31) << 11) | ((agora.getMinutes() & 63) << 5) | ((Math.floor(agora.getSeconds()/2)) & 31);
+                const dosDate = (((agora.getFullYear() - 1980) & 127) << 9) | (((agora.getMonth()+1) & 15) << 5) | (agora.getDate() & 31);
+
+                for (let i = 0; i < PHOTOS.length; i++) {
+                    const ph = PHOTOS[i];
+                    const nomeBytes = enc.encode(nomeFoto(i, ph));
+                    const dados = await blobParaBytes(dataURLParaBlob(ph.dataURL));
+                    const crc = crc32(dados);
+                    const tamanho = dados.length;
+
+                    const local = concatBytes([
+                        u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(dosTime), u16(dosDate),
+                        u32(crc), u32(tamanho), u32(tamanho), u16(nomeBytes.length), u16(0), nomeBytes, dados
+                    ]);
+                    locais.push(local);
+
+                    const central = concatBytes([
+                        u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(dosTime), u16(dosDate),
+                        u32(crc), u32(tamanho), u32(tamanho), u16(nomeBytes.length), u16(0), u16(0), u16(0), u16(0),
+                        u32(0), u32(offset), nomeBytes
+                    ]);
+                    centrais.push(central);
+                    offset += local.length;
+                }
+
+                const blocoLocal = concatBytes(locais);
+                const blocoCentral = concatBytes(centrais);
+                const fim = concatBytes([
+                    u32(0x06054b50), u16(0), u16(0), u16(PHOTOS.length), u16(PHOTOS.length),
+                    u32(blocoCentral.length), u32(blocoLocal.length), u16(0)
+                ]);
+                return new Blob([blocoLocal, blocoCentral, fim], { type: 'application/zip' });
+            }
+
+            async function baixarTodasFotos() {
+                if (!PHOTOS.length) { showToast('Nenhuma foto anexada.'); return; }
+                const btn = document.getElementById('btnDownloadAll');
+                btn.disabled = true;
+                const texto = btn.textContent;
+                btn.textContent = 'Preparando fotos...';
+                try {
+                    const zip = await criarZipFotos();
+                    const wo = slugify((document.getElementById('inpWO')?.value || 'sem-WO').trim()) || 'sem-WO';
+                    baixarBlob(zip, `WO-${wo}_fotos.zip`);
+                    showToast(`${PHOTOS.length} foto(s) salvas em ZIP.`);
+                } catch (e) {
+                    console.error(e);
+                    showToast('Nao foi possivel gerar o arquivo de fotos.');
+                } finally {
+                    btn.textContent = texto;
+                    btn.disabled = PHOTOS.length === 0;
+                }
+            }
+
             function renderPhotoList() {
                 const box = document.getElementById('photoList');
                 box.innerHTML = "";
+                const btnAll = document.getElementById('btnDownloadAll');
+                if (btnAll) btnAll.disabled = PHOTOS.length === 0;
+
                 PHOTOS.forEach((ph, i) => {
                     const row = document.createElement('div');
                     row.className = 'photo-row';
                     const img = document.createElement('img');
                     img.src = ph.dataURL;
+                    img.className = ph.orientation || ((ph.width || 0) > (ph.height || 0) ? 'landscape' : 'portrait');
                     row.append(img);
                     
                     const right = document.createElement('div');
                     right.innerHTML = `<textarea class="input caption" placeholder="Descreva o que esta foto mostra...">${ph.caption || ""}</textarea>
                                        <div class="actions" style="margin-top:6px">
+                                         <button class="btn gray" data-save="${i}">Salvar foto</button>
                                          <button class="btn gray" data-del="${i}">Remover</button>
                                        </div>`;
                     row.append(right);
@@ -628,6 +907,8 @@
                     right.querySelector('.caption').addEventListener('input', (e) => {
                         PHOTOS[i].caption = e.target.value;
                     });
+
+                    right.querySelector('[data-save]').addEventListener('click', () => baixarFoto(i));
                     
                     right.querySelector('[data-del]').addEventListener('click', () => {
                         PHOTOS.splice(i, 1);
@@ -635,22 +916,44 @@
                     });
                 });
             }
-            document.getElementById('filePhoto').addEventListener('change', (e) => addPhoto(e.target.files?.[0]));
+            document.getElementById('btnDownloadAll').addEventListener('click', baixarTodasFotos);
+            document.getElementById('filePhoto').addEventListener('change', async (e) => {
+                await addPhoto(e.target.files?.[0]);
+                e.target.value = '';
+            });
+            document.getElementById('cameraPhoto').addEventListener('change', async (e) => {
+                await addPhoto(e.target.files?.[0]);
+                e.target.value = '';
+            });
 
             // CÂMERA
             const camModal = document.getElementById('camModal');
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             const btnCam = document.getElementById('btnCam');
+            const cameraPhoto = document.getElementById('cameraPhoto');
             const btnShot = document.getElementById('btnShot');
             const btnUse = document.getElementById('btnUse');
             const btnClose = document.getElementById('btnClose');
 
             async function openCamera() {
+                // Arquivos HTML abertos diretamente (file://) normalmente nao podem usar getUserMedia.
+                // No celular, usamos o seletor nativo com capture=environment, que abre a camera
+                // e ainda envia a foto pelo mesmo fluxo de compressao do relatorio.
+                const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+                const precisaCameraNativa = location.protocol === 'file:' || !window.isSecureContext || isMobile;
+
+                if (precisaCameraNativa) {
+                    cameraPhoto.value = '';
+                    cameraPhoto.click();
+                    return;
+                }
+
                 try {
                     const constraints = { video: { facingMode: { ideal: "environment" } }, audio: false };
                     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        showToast("Sem acesso à câmera; use Anexar imagem.");
+                        cameraPhoto.value = '';
+                        cameraPhoto.click();
                         return;
                     }
                     stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -662,7 +965,7 @@
                     btnShot.style.display = "inline-flex";
                     camModal.style.display = "flex";
                 } catch(e) {
-                    showToast("Sem acesso à câmera; verifique as permissões do navegador.");
+                    showToast("A camera do navegador foi bloqueada. Use a camera nativa do aparelho.");
                 }
             }
             btnCam.addEventListener('click', openCamera);
@@ -680,10 +983,16 @@
                 btnUse.style.display = "inline-flex";
                 btnShot.style.display = "none";
             });
-            btnUse.addEventListener('click', () => {
-                const dataURL = canvas.toDataURL('image/jpeg', 0.9);
-                addPhotoDataURL(dataURL);
-                btnClose.click();
+            btnUse.addEventListener('click', async () => {
+                btnUse.disabled = true;
+                try {
+                    // A imagem da camera tambem passa pela mesma reducao antes de entrar no relatorio.
+                    const dataURL = canvas.toDataURL('image/jpeg', 0.82);
+                    await addPhotoDataURL(dataURL);
+                    btnClose.click();
+                } finally {
+                    btnUse.disabled = false;
+                }
             });
 
             // PDF
@@ -718,6 +1027,26 @@
                 document.getElementById('phWO').textContent = "WO: " + woTxt;
                 document.getElementById('phTec').textContent = "Técnico: " + tecTxt;
                 document.getElementById('phDefeito').textContent = "Defeito: " + DEF_ATUAL;
+
+                const phExtraHeader = document.getElementById('phExtraHeader');
+                phExtraHeader.textContent = "";
+                phExtraHeader.style.display = 'none';
+                if (DEF_ATUAL === "Falta de Cura") {
+                    const h = getFaltaCuraHeader();
+                    const campos = [
+                        ['RL', h.RL],
+                        ['Prensa', h.Prensa],
+                        ['Lado', h.Lado],
+                        ['Turno', h.Turno],
+                        ['Grupo', h.Grupo],
+                        ['Pneu', h.Pneu],
+                        ['Data do Setup', formatDataBR(h.DataSetup)]
+                    ].filter(([, v]) => v);
+                    if (campos.length) {
+                        phExtraHeader.style.display = 'block';
+                        phExtraHeader.textContent = campos.map(([k, v]) => `${k}: ${v}`).join(' | ');
+                    }
+                }
                 
                 const phDiagramas = document.getElementById('phDiagramas');
                 phDiagramas.innerHTML = "";
@@ -798,6 +1127,7 @@
                         const fig = document.createElement('figure');
                         const im = document.createElement('img');
                         im.src = p.dataURL;
+                        im.className = p.orientation || ((p.width || 0) > (p.height || 0) ? 'landscape' : 'portrait');
                         fig.append(im);
                         const cap = document.createElement('figcaption');
                         cap.textContent = p.caption || '';
@@ -832,6 +1162,14 @@
             }
 
             // EVENTOS PRINCIPAIS
+            const selDefeito = document.getElementById('selDef');
+            const fcHeaderFields = document.getElementById('fcHeaderFields');
+            const atualizarCamposFaltaCura = () => {
+                fcHeaderFields.style.display = selDefeito.value === "Falta de Cura" ? "block" : "none";
+            };
+            selDefeito.addEventListener('change', atualizarCamposFaltaCura);
+            atualizarCamposFaltaCura();
+
             document.getElementById('btnGo').addEventListener('click', () => {
                 if (!validarCamposIniciais()) return;
                 DEF_ATUAL = document.getElementById('selDef').value;
@@ -864,6 +1202,11 @@
                 document.getElementById('inpWO').value = "";
                 document.getElementById('inpTec').value = "";
                 document.getElementById('selDef').value = "";
+                ['inpRL','inpPrensa','inpLado','inpTurno','inpGrupo','inpPneu','inpDataSetup'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = "";
+                });
+                document.getElementById('fcHeaderFields').style.display = 'none';
                 document.getElementById('lista').innerHTML = "";
                 document.getElementById('cardChk').style.display = 'none';
                 document.getElementById('done').textContent = "0";
