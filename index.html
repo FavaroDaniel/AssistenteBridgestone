@@ -169,11 +169,32 @@
             #printArea { display: block !important; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             
-            /* Nunca quebrar diagramas no meio */
-            .avoid-break, .print-diagram, .diagram-grid, table, thead, tbody, tr, td, th {
+            /* Nunca quebrar blocos curtos ou diagramas no meio */
+            .avoid-break, .print-diagram, .diagram-grid, .print-photos figure {
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
             }
+
+            /* Tabela do checklist: pode continuar na próxima página,
+               mas sem cortar etapa/linha pela metade */
+            .report-table {
+                page-break-inside: auto !important;
+                break-inside: auto !important;
+            }
+            .report-table thead {
+                display: table-header-group;
+            }
+            .report-table tbody {
+                display: table-row-group;
+            }
+            .report-table tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .report-table td, .report-table th {
+                vertical-align: top;
+            }
+
             /* Forçar 2 colunas (2x2) no PDF */
             .diagram-grid {
                 grid-template-columns: repeat(2, 1fr) !important;
@@ -227,6 +248,9 @@
         /* Câmera modal */
         #camModal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 50; }
         #camBox { background: #fff; padding: 16px; border-radius: 12px; max-width: 720px; width: 95%; }
+        .branch-hint { display:none; margin-top:8px; padding:9px 11px; border-radius:8px; background:#f4f4f4; border-left:4px solid #555; font-size:12px; line-height:1.45; }
+        .branch-hint.show { display:block; }
+        .branch-hint strong { font-weight:800; }
         #camBox video, #camBox canvas { width: 100%; max-height: 60vh; background: #000; border-radius: 10px; }
     </style>
 </head>
@@ -257,6 +281,7 @@
                 <option value="" selected>— selecione —</option>
                 <option value="Abortou a Cura">Abortou a Cura</option>
                 <option value="Falta de Cura">Falta de Cura</option>
+                <option value="prensa_fechamento">Prensa não fecha / não completa fechamento</option>
             </select>
 
             <!-- Campos adicionais do cabeçalho, exclusivos para Falta de Cura -->
@@ -360,7 +385,7 @@
     </div>
 
     <!-- Área de impressão (PDF) -->
-    <div id="printWrap" class="avoid-break">
+    <div id="printWrap">
         <div id="printArea">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                 <div style="font-weight:800">Assistente de Diagnóstico</div>
@@ -371,9 +396,9 @@
             <div id="phWO" class="small" style="margin:0 0 2px"></div>
             <div id="phTec" class="small" style="margin:0 0 4px"></div>
             <div id="phExtraHeader" class="small avoid-break" style="display:none;margin:0 0 10px;line-height:1.6"></div>
-            <div id="phDiagramas" class="avoid-break"></div>
-            <div class="avoid-break">
-                <table style="width:100%;border-collapse:collapse;margin:10px 0" border="1" cellpadding="6">
+            <div id="phDiagramas" class="avoid-break" style="margin-bottom:6px"></div>
+            <div>
+                <table class="report-table" style="width:100%;border-collapse:collapse;margin:10px 0" border="1" cellpadding="6">
                     <thead><tr><th style="width:40%">Passo</th><th style="width:10%">Status</th><th>Observação</th></tr></thead>
                     <tbody id="phTable"></tbody>
                 </table>
@@ -392,7 +417,7 @@
     <script>
         // Dados dos defeitos e checklists
         const DATA = {
-            "defeitos": ["Abortou a Cura", "Falta de Cura"],
+            "defeitos": ["Abortou a Cura", "Falta de Cura", "prensa_fechamento"],
             "itens_por_defeito": {
                 "Abortou a Cura": [
                     {"PassoOrdem":1,"OQueVerificar":"Teste de vazamento","ComoVerificar":"Instalar tampão e executar teste; confirmar se o aborto ocorreu logo após a etapa de vazamento."},
@@ -425,6 +450,31 @@
                     {"PassoOrdem":11,"OQueVerificar":"Análise dos gráficos de temperatura e pressão (IHM/CCM)","ComoVerificar":"Comparar curvas com parâmetros da carta; buscar anomalias."},
                     {"PassoOrdem":12,"OQueVerificar":"Confirmação do tempo de cura","ComoVerificar":"Verificar tempo no IHM e comparar com a carta."},
                     {"PassoOrdem":13,"OQueVerificar":"Aquecimento inicial antes do ciclo","ComoVerificar":"Confirmar se o aquecimento da prensa foi realizado corretamente, antes do carregamento."}
+                ],
+                "prensa_fechamento": [
+                    {"PassoOrdem":1,"OQueVerificar":"Condição da falha antes do reset","ComoVerificar":"Antes de resetar, registrar alarmes da IHM/painel, lado da prensa, etapa do ciclo em que parou, posição aproximada da prensa e quais permissivos não estão atendidos. Registrar foto da tela quando houver informação relevante."},
+                    {"PassoOrdem":2,"OQueVerificar":"Interferência física ou componente impedindo o fechamento","ComoVerificar":"Inspecionar visualmente a região da prensa e confirmar se não há pneu, carregador, descarregador, garra, anel, molde ou outro componente fora de posição/interferindo mecanicamente. Para qualquer intervenção na zona de risco, seguir o procedimento de bloqueio da área.","RamoNOK":"Corrija a interferência encontrada e repita o comando de fechamento. Se a falha permanecer, prossiga para segurança e permissivos."},
+                    {"PassoOrdem":3,"OQueVerificar":"Sistema de segurança da prensa","ComoVerificar":"Verificar barra de segurança, barreiras/cortinas de luz, scanner, portões e demais dispositivos de segurança. Conferir LEDs, alinhamento, sujeira, fixação e indicação no painel/CLP de segurança. Não realizar ponte ou bypass dos dispositivos.","RamoNOK":"Trate primeiro o dispositivo de segurança que não estiver liberado. Após normalizar, refaça o fechamento antes de aprofundar o diagnóstico."},
+                    {"PassoOrdem":4,"OQueVerificar":"Modo de operação e permissivos de fechamento","ComoVerificar":"Confirmar modo Automático/Manual, posição das seletoras e estado dos permissivos na IHM. Identificar qual condição está impedindo a sequência de fechamento antes de movimentar componentes.","RamoNOK":"Use o permissivo ausente para direcionar a investigação aos passos de carregador, descarregador, segmentado, anéis, pressão ou alarmes. Evite procurar falha no motor antes de confirmar esses retornos."},
+                    {"PassoOrdem":5,"OQueVerificar":"Indicação de carregador fora da prensa","ComoVerificar":"Confirmar indicação de CARREGADOR FORA nos dois lados aplicáveis. Verificar sensores/limites, atuadores, hastes, suportes, alinhamento, fixação e se o sensor está sendo totalmente acionado.","RamoNOK":"Priorize o passo 6: confirme se o carregador realmente chegou ao fim de curso e se o acionamento do sensor é mecânica e eletricamente confiável."},
+                    {"PassoOrdem":6,"OQueVerificar":"Posição e condição mecânica do carregador","ComoVerificar":"Verificar se o carregador chegou completamente à posição esperada, sem travamento, desalinhamento ou altura incorreta. Inspecionar mecanismo, guias e componentes que possam impedir o retorno completo."},
+                    {"PassoOrdem":7,"OQueVerificar":"Indicação de descarregador fora da prensa","ComoVerificar":"Confirmar indicação de DESCARREGADOR FORA nos lados aplicáveis. Verificar limites/sensores, hastes, atuadores, suportes, regulagem e se o mecanismo realmente atingiu a posição final."},
+                    {"PassoOrdem":8,"OQueVerificar":"Posição do molde segmentado / segmento estendido","ComoVerificar":"Confirmar indicação de SEGMENTO ESTENDIDO nos dois lados. Verificar sensores ou limites, posição dos atuadores, hastes, suportes, fixação e regulagem. Confirmar que o acionamento ocorre com margem suficiente e não apenas no limite.","RamoNOK":"Siga para o passo 9 e diferencie falha de indicação/sensor de falha real no movimento do segmentado."},
+                    {"PassoOrdem":9,"OQueVerificar":"Movimento mecânico do molde segmentado","ComoVerificar":"Verificar se todos os segmentos completam o movimento sem travamento, esforço anormal ou atraso. Inspecionar mecanismo, lubrificação, folgas, desalinhamento e condição mecânica. Se aplicável, verificar o funcionamento/alívio responsável pelo movimento do segmentado.","RamoNOK":"Se o movimento estiver incompleto ou fraco, priorize também o passo 13 para verificar o sistema hidráulico/pneumático responsável pelo acionamento."},
+                    {"PassoOrdem":10,"OQueVerificar":"Posição do anel inferior","ComoVerificar":"Confirmar se o anel inferior está na posição exigida para permitir o fechamento. Verificar sensores/limites, atuadores, haste, mecanismo e possíveis travamentos.","RamoNOK":"Se o anel não completa o movimento, verifique o atuador e depois o sistema hidráulico/pneumático do passo 13."},
+                    {"PassoOrdem":11,"OQueVerificar":"Posição do anel superior","ComoVerificar":"Nas prensas aplicáveis, confirmar posição correta do anel superior e respectiva indicação. Verificar sensores, atuadores, mecanismo e possíveis interferências.","RamoNOK":"Se o anel não completa o movimento, verifique o atuador e depois o sistema hidráulico/pneumático do passo 13."},
+                    {"PassoOrdem":12,"OQueVerificar":"Pressão do molde","ComoVerificar":"Comparar a pressão indicada com o valor especificado para a condição da máquina. Verificar pressão excessiva ou insuficiente, regulagem e possíveis alterações que estejam interferindo no fechamento.","RamoNOK":"Priorize o circuito responsável pela pressão do molde e confirme válvulas/regulagem no passo 13 antes de investigar o acionamento principal."},
+                    {"PassoOrdem":13,"OQueVerificar":"Sistema hidráulico/pneumático de movimentação","ComoVerificar":"Nas prensas aplicáveis, verificar pressão disponível, cilindros, válvulas, solenoides, reguladores e vazamentos. Confirmar se as válvulas responsáveis pelo movimento estão comandando e retornando normalmente."},
+                    {"PassoOrdem":14,"OQueVerificar":"Alarmes de aquecimento / vapor e permissivos associados","ComoVerificar":"Verificar se algum alarme ou condição de aquecimento está bloqueando a sequência. Confirmar permissivos relacionados a aquecimento/vapor e comparar o estado mostrado na IHM com a condição real da prensa."},
+                    {"PassoOrdem":15,"OQueVerificar":"Comando do motor principal de abertura/fechamento","ComoVerificar":"Nas prensas com acionamento eletromecânico, verificar se existe comando para o motor quando solicitado o fechamento. Conferir contatores, relés de comando e indicação de funcionamento antes de avançar para o circuito de potência.","RamoOK":"Com comando presente, concentre a investigação nos passos 16 a 19: proteção, corrente/esforço, freio e transmissão mecânica.","RamoNOK":"Sem comando para o motor, priorize os passos 20 a 23: retorno de prensa fechada, posição/encoder, entradas e saídas do CLP e alimentação/comunicação do controle."},
+                    {"PassoOrdem":16,"OQueVerificar":"Relé térmico / proteção do motor principal","ComoVerificar":"Verificar se a proteção está desarmada ou apresentando mau contato. Conferir ajuste conforme os dados do motor e investigar a causa do desarme antes de simplesmente rearmar.","RamoNOK":"Depois de identificar a causa do desarme, utilize a corrente do passo 17 para diferenciar sobrecarga mecânica de problema elétrico/acionamento."},
+                    {"PassoOrdem":17,"OQueVerificar":"Corrente e esforço do motor durante o fechamento","ComoVerificar":"Quando aplicável e com medição segura, comparar a corrente durante o fechamento com o comportamento normal da prensa. Corrente elevada pode indicar freio arrastando, pressão excessiva, travamento mecânico ou problema na transmissão.","RamoNOK":"Com corrente/esforço anormal, priorize o freio no passo 18 e a transmissão mecânica no passo 19, além de reavaliar pressão e travamentos."},
+                    {"PassoOrdem":18,"OQueVerificar":"Freio do motor da prensa","ComoVerificar":"Verificar se o freio libera corretamente durante o comando e se não permanece arrastando. Inspecionar bobina, alimentação, regulagem, discos e condição mecânica conforme o modelo instalado."},
+                    {"PassoOrdem":19,"OQueVerificar":"Transmissão mecânica do fechamento","ComoVerificar":"Se o motor recebe comando e gira sem movimentação normal da prensa, verificar acoplamento, chaveta, eixo, redutor e demais elementos de transmissão quanto a quebra, folga ou travamento."},
+                    {"PassoOrdem":20,"OQueVerificar":"Limite / sensor de prensa fechada","ComoVerificar":"Verificar o dispositivo responsável pela indicação final de PRENSA FECHADA. Conferir atuação mecânica, haste/atuador, regulagem, fixação e sinal elétrico. Confirmar que o fechamento físico corresponde à indicação do controle.","RamoNOK":"Confirme no passo 22 se a mudança física do sensor chega corretamente à entrada do CLP."},
+                    {"PassoOrdem":21,"OQueVerificar":"Encoder / contador de pulso / referência de posição","ComoVerificar":"Nas prensas que utilizam encoder ou contador de pulsos, acompanhar a leitura durante o movimento e verificar se varia continuamente. Conferir referência de prensa aberta/fechada, conectores, alimentação e possível perda de posição.","RamoNOK":"Se a leitura estiver parada, errática ou sem referência, confirme alimentação/comunicação e o sinal visto pelo controle nos passos 22 e 23."},
+                    {"PassoOrdem":22,"OQueVerificar":"Entradas e saídas do PLC/CLP","ComoVerificar":"Comparar no diagnóstico do PLC/CLP os comandos e retornos envolvidos no fechamento. Confirmar se o sinal físico chega à entrada e se a saída esperada é comandada. Verificar módulos/cartões e LEDs de diagnóstico quando houver divergência.","RamoNOK":"Se vários sinais estiverem ausentes ou incoerentes simultaneamente, priorize o passo 23 antes de condenar sensores ou cartões isoladamente."},
+                    {"PassoOrdem":23,"OQueVerificar":"Alimentação e comunicação do sistema de controle","ComoVerificar":"Se houver falhas intermitentes ou perda de vários sinais simultaneamente, verificar fontes, alimentação dos módulos, comunicação, conectores de rede e LEDs de PLC/CLP, remotas, módulos de segurança e acionamentos."}
                 ]
             }
         };
@@ -435,7 +485,7 @@
             const toast = $("#toast");
             const showToast = (t) => { toast.textContent = t; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 3000); };
 
-            let ITEMS = [], DEF_ATUAL = "", PHOTOS = [], stream = null;
+            let ITEMS = [], DEF_ATUAL = "", DEF_LABEL = "", PHOTOS = [], stream = null;
 
             // DIAGRAMAS
             function buildCircle(idPrefix) {
@@ -485,7 +535,7 @@
             }
 
             function renderChecklist() {
-                $("#chkTitle").textContent = "Checklist – " + DEF_ATUAL;
+                $("#chkTitle").textContent = "Checklist – " + (DEF_LABEL || DEF_ATUAL);
                 const lista = $("#lista");
                 lista.innerHTML = "";
                 
@@ -505,7 +555,8 @@
                             <label style="margin-left:10px"><input type="radio" name="r${idx}" value="NOK"> NOK</label>
                             <label style="margin-left:10px"><input type="radio" name="r${idx}" value="NA"> N.A.</label>
                         </div>
-                        <textarea class="obs" placeholder="Observação (obrigatória se marcar NOK)"></textarea>`;
+                        <textarea class="obs" placeholder="Observação (obrigatória se marcar NOK)"></textarea>
+                        ${(it.RamoOK || it.RamoNOK || it.RamoNA) ? `<div class="branch-hint" data-idx="${idx}"></div>` : ""}`;
                     lista.append(el);
                 });
                 
@@ -522,6 +573,7 @@
                             area.classList.remove('error');
                             cont.classList.remove('error');
                         }
+                        updateBranchHint(e.target);
                         updateProgress();
                     }
                 });
@@ -534,6 +586,25 @@
                         t.style.height = t.scrollHeight + 'px';
                     });
                 });
+            }
+
+            function updateBranchHint(input) {
+                const card = input?.closest('.item');
+                if (!card) return;
+                const hint = card.querySelector('.branch-hint');
+                if (!hint) return;
+                const name = input.name || '';
+                const idx = Number(name.replace(/^r/, ''));
+                const it = ITEMS[idx];
+                if (!it) return;
+                const msg = input.value === 'OK' ? it.RamoOK : input.value === 'NOK' ? it.RamoNOK : it.RamoNA;
+                if (msg) {
+                    hint.innerHTML = `<strong>Próximo caminho recomendado:</strong> ${msg}`;
+                    hint.classList.add('show');
+                } else {
+                    hint.textContent = '';
+                    hint.classList.remove('show');
+                }
             }
 
             function updateProgress() {
@@ -1025,7 +1096,7 @@
                 const tecTxt = (document.getElementById('inpTec').value || "-");
                 document.getElementById('phWO').textContent = "WO: " + woTxt;
                 document.getElementById('phTec').textContent = "Técnico: " + tecTxt;
-                document.getElementById('phDefeito').textContent = "Defeito: " + DEF_ATUAL;
+                document.getElementById('phDefeito').textContent = "Defeito: " + (DEF_LABEL || DEF_ATUAL);
 
                 const phExtraHeader = document.getElementById('phExtraHeader');
                 phExtraHeader.textContent = "";
@@ -1171,8 +1242,15 @@
 
             document.getElementById('btnGo').addEventListener('click', () => {
                 if (!validarCamposIniciais()) return;
-                DEF_ATUAL = document.getElementById('selDef').value;
+                const sel = document.getElementById('selDef');
+                DEF_ATUAL = sel.value;
+                DEF_LABEL = sel.options[sel.selectedIndex]?.textContent?.trim() || DEF_ATUAL;
                 ITEMS = (DATA.itens_por_defeito[DEF_ATUAL] || []);
+                if (!ITEMS.length) {
+                    document.getElementById('cardChk').style.display = 'none';
+                    showToast('Checklist não encontrado para o defeito selecionado.');
+                    return;
+                }
                 renderChecklist();
                 document.getElementById('cardChk').style.display = 'block';
                 document.getElementById('cardOut').style.display = 'none';
@@ -1201,6 +1279,7 @@
                 document.getElementById('inpWO').value = "";
                 document.getElementById('inpTec').value = "";
                 document.getElementById('selDef').value = "";
+                DEF_ATUAL = ""; DEF_LABEL = ""; ITEMS = [];
                 ['inpRL','inpPrensa','inpLado','inpTurno','inpGrupo','inpPneu','inpDataSetup'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.value = "";
